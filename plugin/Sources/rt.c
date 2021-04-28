@@ -1,6 +1,7 @@
 
 #include "3ds.h"
 #include "rt.h"
+#include <string.h>
 
 Handle hCurrentProcess = 0;
 u32 currentPid = 0;
@@ -31,7 +32,7 @@ u32 rtGetPageOfAddress(u32 addr) {
 }
 
 u32 rtFlushInstructionCache(void* ptr, u32 size) {
-	return svcFlushProcessDataCache(getCurrentProcessHandle(), (const void*)ptr, size);
+	return svcFlushProcessDataCache(getCurrentProcessHandle(), (u32)ptr, size);
 }
 
 u32 rtGenerateJumpCode(u32 dst, u32* buf) {
