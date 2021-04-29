@@ -1,24 +1,28 @@
 # kartdlphax
-**kartdlphax** is a semiprimary exploit in the download play mode of Mario Kart 7.
+**kartdlphax** is a semiprimary exploit for the download play mode of [Mario Kart 7](https://en.wikipedia.org/wiki/Mario_Kart_7). It can be used to run an userland payload in an unmodified 3DS by having it connect through download play to another 3DS with Custom Firmware running the exploit.
 
 ## Installation
-The exploit uses a 3GX Plugin in the host system to send modified data to all the client systems. Therefore, in order to use this exploit you need to install the [3GX Loader Luma3DS fork](https://github.com/Nanquitas/Luma3DS/releases/latest).
+The exploit uses a 3GX Plugin in the host system. Therefore, in order to use this exploit you need to install the [3GX Loader Luma3DS fork](https://github.com/Nanquitas/Luma3DS/releases/latest).
 
-In the host console, place the `.3gx` file in the following directories:
+In the host console, place the `.3gx` file from the [Releases page](https://github.com/mariohackandglitch/kartdlphax/releases/latest) in the following directories depending on your game region:
 - EUR: `luma/plugins/0004000000030700`
 - JAP: `luma/plugins/0004000000030600`
 - USA: `luma/plugins/0004000000030800`
 
-By default, the plugin will use the built-in otherapp payload (universal-otherap). You can place your own otherapp at `/kartdlphax_otherapp.bin`, but keep in mind that homebrew otherapp doesn't work currently.
+(TWN, CHN and KOR regions untested).
+
+By default, the plugin will use the built-in otherapp payload (universal-otherap). You can place your own otherapp at `/kartdlphax_otherapp.bin`, but keep in mind that the hax 2.0 otherapp doesn't work currently.
 
 ## Usage
-1. On the host 3ds, make sure the plugin loader is enabled from the Rosalina menu (L+Down+Select), then launch the Mario Kart 7 game. (You will see a confirmation message in the top screen).
+1. On the host 3ds, make sure the plugin loader is enabled from the Rosalina menu (L+Down+Select), then launch the Mario Kart 7 game matching the region of the client 3ds(es). (You will see a confirmation message in the top screen once the game launches).
 
-2. On the client 3ds(es), launch the download play application-
+2. On the client 3ds(es), launch the download play application.
 
-3. On the host 3ds, select `Local Multiplayer` and then `Create Group`. Then let the client 3ds(es) join the group.
+3. On the host 3ds, select `Local Multiplayer` then `Create Group`. After that, let the client 3ds(es) join the group.
 
-4. On the host 3ds, select `Grand Prix` then `50cc` then any driver combination and finally the `Mushroom Cup`. After a while the exploit will trigger on the client 3ds(es).
+4. Once the multiplayer menu loads on the host 3ds, select `Grand Prix` then `50cc` then any driver combination and finally the `Mushroom Cup`. After a while the exploit will trigger on the client 3ds(es).
+
+Keep in mind that while you can send the exploit to 8 consoles at the same time, the success rate seems to decrease for each console added.
 
 ## Technical Details
 This exploit consists of 3 stages + the otherapp.
