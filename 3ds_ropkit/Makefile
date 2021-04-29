@@ -11,7 +11,7 @@ payload.bin: $(HAXNAME).elf
 	cp ropbin.h ../plugin/Includes/ropbin.h
 
 $(HAXNAME).elf: $(HAXNAME).s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x14250000 $< -o $(HAXNAME).elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x1424FDBC $< -o $(HAXNAME).elf
 
 miniapp.bin: miniapp.elf
 	C:\devkitPro\devkitARM\bin\arm-none-eabi-objcopy -O binary miniapp.elf miniapp.bin

@@ -1,4 +1,4 @@
-#include "parameters.h"
+#include "parameters.s"
 #include "addr.s"
 #include "ropkit_ropinclude.s"
 _start:
