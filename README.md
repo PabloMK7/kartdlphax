@@ -12,10 +12,10 @@ The exploit uses a 3GX Plugin in the host system. Therefore, in order to use thi
 
 In the host console, place the `.3gx` file from the [Releases page](https://github.com/mariohackandglitch/kartdlphax/releases/latest) in the following directories depending on your game region:
 - EUR: `luma/plugins/0004000000030700`
-- JAP: `luma/plugins/0004000000030600`
-- USA: `luma/plugins/0004000000030800`
+- ~~JAP: `luma/plugins/0004000000030600`~~
+- ~~USA: `luma/plugins/0004000000030800`~~
 
-(TWN, CHN and KOR regions untested).
+**THIS EXPLOIT ONLY WORKS IN EUR CONSOLES CURRENTLY.**
 
 By default, the plugin will use the built-in otherapp payload (universal-otherap). You can place your own otherapp at `/kartdlphax_otherapp.bin`, but keep in mind that the hax 2.0 otherapp doesn't work currently.
 
