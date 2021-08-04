@@ -1,5 +1,15 @@
-    #include "parameters.s"
-    #include "addr.s"
+	#ifdef EUR_BUILD
+	#include "parameters_eur.s"
+	#include "addr_eur.s"
+	#endif
+	#ifdef USA_BUILD
+	#include "parameters_usa.s"
+	#include "addr_usa.s"
+	#endif
+	#ifdef JAP_BUILD
+	#include "parameters_jap.s"
+	#include "addr_jap.s"
+	#endif
     .arm
 	@ I'm about to commit sin with these branch abstractions
 	#define HELPERAPP_TARGET_ADDR 0x100000

