@@ -12,10 +12,8 @@ The exploit uses a 3GX Plugin in the host system. Therefore, in order to use thi
 
 In the host console, place the `.3gx` file from the [Releases page](https://github.com/mariohackandglitch/kartdlphax/releases/latest) in the following directories depending on your game region:
 - EUR: `luma/plugins/0004000000030700`
-- ~~JAP: `luma/plugins/0004000000030600`~~
-- ~~USA: `luma/plugins/0004000000030800`~~
-
-**THIS EXPLOIT ONLY WORKS IN EUR CONSOLES CURRENTLY.**
+- JAP: `luma/plugins/0004000000030600`
+- USA: `luma/plugins/0004000000030800`
 
 By default, the plugin will use the built-in otherapp payload (universal-otherap). You can place your own otherapp at `/kartdlphax_otherapp.bin`, but keep in mind that the hax 2.0 otherapp doesn't work currently.
 
@@ -45,6 +43,7 @@ You can find more in-depth details in the comments inside the [plugin](plugin/So
 - [CTRPF](https://gbatemp.net/threads/ctrpluginframework-blank-plugin-now-with-action-replay.487729/) (by [Nanquitas](https://github.com/Nanquitas)).
 - [nitpic3d](https://github.com/luigoalma/nitpic3d)'s developer [luigoalma](https://github.com/luigoalma) for his huge help.
 - [Kartic](https://github.com/hax0kartik) for his huge help and all the people from his development discord server.
+- [ihaveamac](https://github.com/ihaveamac) for helping me try the exploit in an American console.
 
 ## Notice
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
