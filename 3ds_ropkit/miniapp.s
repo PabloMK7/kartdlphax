@@ -65,6 +65,18 @@ miniapp:
 	mov r1, #ROPKIT_BEFOREJUMP_CACHEBUFSIZE
 	bl TEXTABSTRACTPTR(GSPGPU_FlushDataCache)
 	bl CmpThrow @ throw error if bad result
+	mov r0, #0x100000
+	mov r1, #0x500000
+	mov r3, #ROPKIT_LINEARMEM_REGIONBASE
+	add r3, r3, #MINIAPP_WORKBUFFER_OFFSET
+	add r3, r3, #0x2300
+	add r3, r3, #0x23
+	add r1, r0, r1
+cachereadloop:
+	ldrb r2, [r0], #1
+	strb r2, [r3], #1
+	cmp r0, r1
+	bne cachereadloop
 	ldm r6, {r5-r10} @ we've read .Lotherapp_stackaddr + .Lotherapp_data
 	@ now we setup the paramblk for otherapp
 	mov r0, r6
@@ -76,6 +88,9 @@ miniapp:
 	str r10, [r6, #0x58]
 	mov r0, #0
 	bl colordebug
+	mov r0, #0x20000000
+	mov r1, #0
+	svc #0xA
 	mov r0, r6
 	mov r1, r5
 	bx r4

@@ -22,13 +22,13 @@ payload_jap.bin: payload_jap.elf
 	cp ropbin_jap.h ../plugin/Includes/ropbin_jap.h
 
 payload_eur.elf: payload.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DEUR_BUILD $< -o payload_eur.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DEUR_BUILD $< -o payload_eur.elf
 
 payload_usa.elf: payload.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DUSA_BUILD $< -o payload_usa.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DUSA_BUILD $< -o payload_usa.elf
 
 payload_jap.elf: payload.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DJAP_BUILD $< -o payload_jap.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DJAP_BUILD $< -o payload_jap.elf
 
 miniapp_eur.bin: miniapp_eur.elf
 	C:\devkitPro\devkitARM\bin\arm-none-eabi-objcopy -O binary miniapp_eur.elf miniapp_eur.bin
@@ -46,10 +46,10 @@ miniapp_jap.bin: miniapp_jap.elf
 	cp miniapp_jap.h ../plugin/Includes/miniapp_jap.h
 	
 miniapp_eur.elf: miniapp.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DEUR_BUILD $< -o miniapp_eur.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DEUR_BUILD $< -o miniapp_eur.elf
 
 miniapp_usa.elf: miniapp.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DUSA_BUILD $< -o miniapp_usa.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DUSA_BUILD $< -o miniapp_usa.elf
 
 miniapp_jap.elf: miniapp.s
-	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DJAP_BUILD $< -o miniapp_jap.elf
+	C:\devkitPro\devkitARM\bin\arm-none-eabi-gcc -march=armv6k -mtune=mpcore -x assembler-with-cpp -nostartfiles -nostdlib -Ttext=0x100000 -DJAP_BUILD $< -o miniapp_jap.elf
