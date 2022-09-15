@@ -10,7 +10,8 @@
 #include "miniapp_usa.h"
 #include "ropbin_jap.h"
 #include "miniapp_jap.h"
-#include "otherapp.h"
+#include "otherapps/universal-otherapp.h"
+#include "otherapps/xPloit-injector.h"
 
 #include <vector>
 #include <string.h>
@@ -18,6 +19,8 @@
 extern "C" {
     u32 sendBufferCallback(u32 dst, u32 src, u32 size);
 	u32 g_sendBufferret;
+    void titleMenuCompleteCallback(u32 option);
+    u32 g_titleMenuCompleteret;
 }
 
 static void NAKED sendBufferfunc() {
@@ -34,11 +37,61 @@ static void NAKED sendBufferfunc() {
     );
 }
 
+static void NAKED titleMenuCompletefunc() {
+    __asm__ __volatile__
+    (
+        "LDR             R0, [R0,#0x4C]\n" // The hook replaces two instructions, so we place them here.
+        "LDR             R2, [R7,#0x10]\n"
+        "PUSH			 {R0-R3}\n"
+        "BL				 titleMenuCompleteCallback\n" // Call function to signal title menu completed
+        "POP			 {R0-R3}\n"
+        "LDR			 LR, =g_titleMenuCompleteret\n" // Return to the hook point.
+        "LDR			 PC, [LR]\n"
+    );
+}
+
 namespace CTRPluginFramework
 {
-    LightEvent exitEvent;
+    LightEvent initEvent;
     RT_HOOK sendDataHook;
-    int usedotherapp;
+    RT_HOOK titleMenuCompleteHook;
+    bool wrongOptionSelected = false;
+
+    struct ExploitSelectInfo {
+        u32 magic = 0;
+        bool useBuiltIn = false;
+        bool useUniversal = false;
+        bool isN3DS = false;
+        u8 region = 0;
+
+        static constexpr u32 validMagic = 0x4746434B;
+
+        void Set(bool useBuiltIn_, bool useUniversal_, bool isN3DS_, u8 region_) {
+            magic = validMagic;
+            useBuiltIn = useBuiltIn_;
+            useUniversal = useUniversal_;
+            isN3DS = isN3DS_;
+            region = region_;
+        }
+
+        void Load() {
+            File config("kartdlphax_config.bin", File::READ);
+            if (!config.IsOpen())
+                return;
+            config.Read(this, sizeof(ExploitSelectInfo));
+        }
+
+        void Save() {
+            File config("kartdlphax_config.bin", File::RWC | File::TRUNCATE);
+            if (!config.IsOpen())
+                return;
+            config.Write(this, sizeof(ExploitSelectInfo));
+        }
+
+        bool IsValid(u32 myRegion) {
+            return magic == validMagic && region == myRegion && (useBuiltIn || File::Exists("/kartdlphax_otherapp.bin"));
+        }
+    };
 
     static inline u32   decodeARMBranch(const u32 *src)
 	{
@@ -54,8 +107,11 @@ namespace CTRPluginFramework
     // This function executes before the game runs.
     void    PatchProcess(FwkSettings &settings)
     {
+        LightEvent_Init(&initEvent, RESET_ONESHOT);
+
         const u8 getBufferSizePat[] = {0x09, 0x40, 0x20, 0x10, 0x29, 0x00, 0x56, 0xE3, 0xB1, 0x00, 0x00, 0x0A, 0x29, 0x00, 0xA0, 0xE3};
         const u8 sendBufferDataPat[] = {0x08, 0x00, 0x87, 0xE2, 0x94, 0x06, 0x03, 0xE0, 0x03, 0x10, 0x41, 0xE0, 0x04, 0x00, 0x51, 0xE1};
+        const u8 titleMenuCompletePat[] = {0x03, 0x00, 0x50, 0xE3, 0x01, 0x80, 0xA0, 0xE3, 0x24, 0x00, 0x00, 0x0A, 0x07, 0x00, 0x50, 0xE3};
 
         PatternManager pm;
 
@@ -74,7 +130,29 @@ namespace CTRPluginFramework
 			return true;
 		});
 
+        // Search the function called when pressing a button in the title screen
+        pm.Add(titleMenuCompletePat, 0x10, [](u32 addr) {
+			rtInitHook(&titleMenuCompleteHook, addr - 0x5C, (u32)titleMenuCompletefunc);
+			rtEnableHook(&titleMenuCompleteHook);
+			g_titleMenuCompleteret = addr - 0x5C + 0x8; // + 0x8 because the hook replaces 2 instructions.
+			return true;
+		});
+
         pm.Perform();
+
+        settings.WaitTimeToBoot = Seconds(0);
+    }
+
+    // This will be called when the user presses any option in the title screen
+    void titleMenuCompleteCallback(u32 selectedOption) {
+        // Check that the user properly selected local multiplayer
+        if (selectedOption != 1) {
+            OSD::Notify("Please select Local Multiplayer!");
+            wrongOptionSelected = true;
+        }
+        // Signal the main function to continue
+        LightEvent_Signal(&initEvent);
+
     }
 
     static constexpr u32 TRANSFERBLOCKSIZE = 0x37C;                             // The size in bytes of a single transfer block.
@@ -259,8 +337,11 @@ namespace CTRPluginFramework
     // about 70 copies are sent). That's the reason we send the otherapp size and the repeat times at the start of the buffer.
     // The reconstruct process checks if the current otherapp block first u32 is 0, if it is, it checks the next copy, and so on. 
     // That's why we set the first value of a block to a magic value if it is 0, so miniapp can differentiate it from a missing block.
-    void    constructExploitBuffer() {
+    void    constructExploitBuffer(ExploitSelectInfo& info) {
         u32 otherappsize;
+        // Shouldn't happen, but just in case
+        if (!info.IsValid(gameRegion))
+            Process::ReturnToHomeMenu();
 
         // Allocate exploit buffer.
         exploitBuffer = (u8*)calloc(PLUGINBUFFERSIZE, 1);
@@ -270,20 +351,33 @@ namespace CTRPluginFramework
         memcpy((exploitBuffer + ROPBUF[gameRegion] - STARTBUFFER[gameRegion]), ropbin_addr[gameRegion], ropbin_size[gameRegion]);
         memcpy((exploitBuffer + MINIAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), miniapp_addr[gameRegion], miniapp_size[gameRegion]);
 
-        // Try opening the otherapp file from SD.
+        // Copy the selected otherapp to the buffer
         {
-            File otherappFile("/kartdlphax_otherapp.bin", File::READ);
-            if (otherappFile.IsOpen())
-            {
-                // Read the otherapp file into the first copy in the buffer.
-                usedotherapp = 0;
-                otherappsize = otherappFile.GetSize();
-                otherappFile.Read((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherappsize);
-            } else {
-                // Copy the built-in otherapp into the first copy in the buffer.
-                usedotherapp = 1;
-                otherappsize = otherapp_bin_size;
-                memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherapp_bin, otherappsize);
+            if (!info.useBuiltIn) { // Load file from SD
+                File otherappFile("/kartdlphax_otherapp.bin", File::READ);
+                if (otherappFile.IsOpen()) {
+                    // Read the otherapp file into the first copy in the buffer.
+                    otherappsize = otherappFile.GetSize();
+                    otherappFile.Read((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherappsize);
+                } else { // If the file failed to read, panic.
+                    Process::ReturnToHomeMenu();
+                }
+            } else { // Load built-in file
+                if (info.useUniversal) { // Load universal-otherapp
+                    // Copy the built-in otherapp into the first copy in the buffer.
+                    otherappsize = otherapp_bin_size;
+                    memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherapp_bin, otherappsize);
+                } else { // Load 3DS ROP xPloit Injector
+                    // Copy the built-in otherapp into the first copy in the buffer.
+                    otherappsize = xploit_injector_bins_sizes[info.isN3DS][info.region];
+                    memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), xploit_injector_bins[info.isN3DS][info.region], otherappsize);
+                }
+            }
+
+            // There are some issues if the sent payload is to small apparently.
+            if (otherappsize < 0x3000) {
+                memset((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]) + otherappsize, 0, 0x3000 - otherappsize);
+                otherappsize = 0x3000;
             }
         }
 
@@ -308,16 +402,130 @@ namespace CTRPluginFramework
         ((u32*)exploitBuffer)[1] = repeatTimes;
     }
 
-    // This function is called when the process exits
-    void    OnProcessExit(void)
-    {
-        LightEvent_Signal(&exitEvent);
+    void    SetupConfig(ExploitSelectInfo& info) {
+        Process::Pause();
+        info.Load();
+        const char* regTexts[] {"Europe", "America", "Japan"};
+        std::string title = ToggleDrawMode(Render::UNDERLINE) + CenterAlign("kartdlphax v1.2") + ToggleDrawMode(Render::UNDERLINE) + "\n";
+        bool loopContinue = true;
+        bool promptSettings = false;
+        while (loopContinue) {
+            if (info.IsValid(gameRegion)) {
+                std::string content = ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "Source Console:" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "\n";
+                content += "    Region: " + std::string(regTexts[gameRegion]) + "\n";
+                content += "    Type: " + std::string(System::IsNew3DS() ? "New 3DS" : "Old 3DS") + "\n\n";
+                content += ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "Target Console:" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "\n";
+                content += "    Region: " + std::string(regTexts[info.region]) + "\n";
+                content += "    Type: " + std::string(info.isN3DS ? "New 3DS" : "Old 3DS") + "\n\n";
+                content += ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "Selected Exploit:" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "\n";
+                if (!info.useBuiltIn)
+                    content += "    Custom file from SD";
+                else if (info.useUniversal)
+                    content += "    universal-otherapp";
+                else
+                    content += "    3DS ROP xPloit Injector";
+
+                Keyboard kbd(title + content);
+                kbd.Populate(std::vector<std::string>({"Use settings", "Change settings", "Exit"}));
+                switch (kbd.Open())
+                {
+                case 0:
+                    loopContinue = false;
+                    break;
+                case 1:
+                    promptSettings = true;
+                    break;
+                case 2:
+                    Process::Play();
+                    Process::ReturnToHomeMenu();
+                default:
+                    Process::Play();
+                    System::Reboot();
+                    break;
+                }
+            }
+            if (!loopContinue)
+                break;
+            if (!info.IsValid(gameRegion) || promptSettings) {
+                u8 targetRegion = gameRegion;
+                bool targetIsN3DS = false;
+                bool useBuiltIn = false;
+                bool useUniversal = false;
+                std::string content = "Select the " + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "target console" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + " type.";
+                Keyboard kbd(title + content);
+                kbd.Populate(std::vector<std::string>({"Old 3DS Family", "New 3DS Family"}));
+                kbd.CanAbort(false);
+                switch (kbd.Open())
+                {
+                case 0:
+                    targetIsN3DS = false;
+                    break;
+                case 1:
+                    targetIsN3DS = true;
+                    break;
+                default:
+                    Process::Play();
+                    System::Reboot();
+                    break;
+                }
+                content = "Select the exploit type.\n\nHINT: Select the exploit based on\nthe " + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "target console" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + " firmware version.\n";
+                content += "Firmware 11.16 or more:\n    3DS ROP xPloit Injector\n";
+                content += "Firmware 11.15 or less:\n    universal-otherapp\n\n";
+                bool customFileExists = File::Exists("/kartdlphax_otherapp.bin");
+                std::string sdEntry = "Custom file from SD";
+                if (customFileExists) {
+                    content += "Custom payload found on SD.";
+                } else {
+                    sdEntry = Color(0xc0, 0xc0, 0xc0) << "" + ToggleDrawMode(Render::STRIKETHROUGH) + sdEntry + ToggleDrawMode(Render::STRIKETHROUGH);
+                }
+
+                kbd.GetMessage() = title + content;
+                kbd.Populate(std::vector<std::string>({"3DS ROP xPloit Injector", "universal-otherapp", sdEntry}));
+                bool typeloop = true;
+                while (typeloop)
+                {
+                    switch (kbd.Open())
+                    {
+                    case 0:
+                        useBuiltIn = true;
+                        useUniversal = false;
+                        typeloop = false;
+                        break;
+                    case 1:
+                        useBuiltIn = true;
+                        useUniversal = true;
+                        typeloop = false;
+                        break;
+                    case 2:
+                        if (customFileExists)
+                        {
+                            useBuiltIn = false;
+                            typeloop = false;
+                        }
+                        break;
+                    default:
+                        Process::Play();
+                        System::Reboot();
+                        break;
+                    }
+                }
+                info.Set(useBuiltIn, useUniversal, targetIsN3DS, targetRegion);
+            }
+        }
+        Process::Play();
     }
 
     // This function is called after the game starts executing and CTRPF is ready.
     int     main(void)
     {
-        LightEvent_Init(&exitEvent, RESET_ONESHOT);
+        LightEvent_Wait(&initEvent);
+
+        if (wrongOptionSelected) {
+            Sleep(Seconds(1));
+            Process::ReturnToHomeMenu();
+        }
+
+        ExploitSelectInfo info;
 
         u32 tidLow = (u32)Process::GetTitleID();
         switch (tidLow)
@@ -335,23 +543,14 @@ namespace CTRPluginFramework
             break;
         }
 
-        OSD::Notify("Welcome!");
-        OSD::Notify("kartdlphax v1.1");
-        if (gameRegion != -1) {
-            const char* regTexts[] {"Europe", "America", "Japan"};
-            OSD::Notify(std::string("Region: ") + regTexts[gameRegion]);
-        } else {
-            OSD::Notify("Unsupported region :(");
-            Sleep(Seconds(5.f));
-            Process::ReturnToHomeMenu();
-        }
+        // Setup the config and construct the exploit in memory
+        SetupConfig(info);
+        constructExploitBuffer(info);
+        OSD::Notify("Exploit Ready!");
+        info.Save();
 
-        constructExploitBuffer();
-        
-        OSD::Notify((usedotherapp == 0) ? "Using otherapp file from SD." : "Using built-in universal otherapp.");
-
-        // Wait for process exit event.
-        LightEvent_Wait(&exitEvent);
+        // Wait for process to exit.
+        Process::WaitForExit();
 
         free(exploitBuffer);
 
@@ -363,4 +562,9 @@ namespace CTRPluginFramework
 // Thunk from C to C++.
 u32 sendBufferCallback(u32 dst, u32 src, u32 size) {
 	return CTRPluginFramework::sendBufferCallback(dst, src, size);
+}
+
+// Thunk from C to C++.
+void titleMenuCompleteCallback(u32 option) {
+	CTRPluginFramework::titleMenuCompleteCallback(option);
 }
