@@ -28,7 +28,7 @@ By default, the plugin will use the built-in otherapps ([3DS ROP xPloit Injector
 
 5. Once the multiplayer menu loads on the host 3ds, select `Grand Prix` then `50cc` then any driver combination and finally the `Mushroom Cup`. After a while the exploit will trigger on the client 3ds(es).
 
-Keep in mind that while you can send the exploit to 8 consoles at the same time, the success rate seems to decrease for each console added.
+Keep in mind that while you can send the exploit to 7 consoles at the same time, the success rate seems to decrease for each console added.
 
 ## Technical Details
 This exploit consists of 3 stages + the otherapp.
