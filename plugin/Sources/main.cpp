@@ -56,20 +56,25 @@ namespace CTRPluginFramework
     RT_HOOK sendDataHook;
     RT_HOOK titleMenuCompleteHook;
     bool wrongOptionSelected = false;
-
+    enum class PayloadKind : u8 {
+        UNIVERSAL_OTHERAPP = 0,
+        INJECTOR_11_16 = 1,
+        INJECTOR_11_17 = 2,
+    };
     struct ExploitSelectInfo {
+        
         u32 magic = 0;
         bool useBuiltIn = false;
-        bool useUniversal = false;
+        PayloadKind payloadKind = PayloadKind::INJECTOR_11_17;
         bool isN3DS = false;
         u8 region = 0;
 
-        static constexpr u32 validMagic = 0x4746434B;
+        static constexpr u32 validMagic = 0x3246434B;
 
-        void Set(bool useBuiltIn_, bool useUniversal_, bool isN3DS_, u8 region_) {
+        void Set(bool useBuiltIn_, PayloadKind payloadKind_, bool isN3DS_, u8 region_) {
             magic = validMagic;
             useBuiltIn = useBuiltIn_;
-            useUniversal = useUniversal_;
+            payloadKind = payloadKind_;
             isN3DS = isN3DS_;
             region = region_;
         }
@@ -363,14 +368,18 @@ namespace CTRPluginFramework
                     Process::ReturnToHomeMenu();
                 }
             } else { // Load built-in file
-                if (info.useUniversal) { // Load universal-otherapp
+                if (info.payloadKind == PayloadKind::UNIVERSAL_OTHERAPP) { // Load universal-otherapp
                     // Copy the built-in otherapp into the first copy in the buffer.
                     otherappsize = otherapp_bin_size;
                     memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), otherapp_bin, otherappsize);
-                } else { // Load 3DS ROP xPloit Injector
+                } else if (info.payloadKind == PayloadKind::INJECTOR_11_16) { // Load 3DS ROP xPloit Injector
                     // Copy the built-in otherapp into the first copy in the buffer.
-                    otherappsize = xploit_injector_bins_sizes[info.isN3DS][info.region];
-                    memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), xploit_injector_bins[info.isN3DS][info.region], otherappsize);
+                    otherappsize = xploit_injector_1116_bins_sizes[info.isN3DS][info.region];
+                    memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), xploit_injector_1116_bins[info.isN3DS][info.region], otherappsize);
+                } else if (info.payloadKind == PayloadKind::INJECTOR_11_17) { // Load 3DS ROP xPloit Injector
+                    // Copy the built-in otherapp into the first copy in the buffer.
+                    otherappsize = xploit_injector_1117_bins_sizes[info.isN3DS][info.region];
+                    memcpy((exploitBuffer + OTHERAPPBUF[gameRegion] - STARTBUFFER[gameRegion]), xploit_injector_1117_bins[info.isN3DS][info.region], otherappsize);
                 }
             }
 
@@ -406,7 +415,7 @@ namespace CTRPluginFramework
         Process::Pause();
         info.Load();
         const char* regTexts[] {"Europe", "America", "Japan"};
-        std::string title = ToggleDrawMode(Render::UNDERLINE) + CenterAlign("kartdlphax v1.2") + ToggleDrawMode(Render::UNDERLINE) + "\n";
+        std::string title = ToggleDrawMode(Render::UNDERLINE) + CenterAlign("kartdlphax v1.3") + ToggleDrawMode(Render::UNDERLINE) + "\n";
         bool loopContinue = true;
         bool promptSettings = false;
         while (loopContinue) {
@@ -420,10 +429,12 @@ namespace CTRPluginFramework
                 content += ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "Selected Exploit:" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "\n";
                 if (!info.useBuiltIn)
                     content += "    Custom file from SD";
-                else if (info.useUniversal)
+                else if (info.payloadKind == PayloadKind::UNIVERSAL_OTHERAPP)
                     content += "    universal-otherapp";
-                else
-                    content += "    3DS ROP xPloit Injector";
+                else if (info.payloadKind == PayloadKind::INJECTOR_11_16)
+                    content += "    xPloitInjector (11.16)";
+                else if (info.payloadKind == PayloadKind::INJECTOR_11_17)
+                    content += "    xPloitInjector (11.17)";
 
                 Keyboard kbd(title + content);
                 kbd.Populate(std::vector<std::string>({"Use settings", "Change settings", "Exit"}));
@@ -450,7 +461,7 @@ namespace CTRPluginFramework
                 u8 targetRegion = gameRegion;
                 bool targetIsN3DS = false;
                 bool useBuiltIn = false;
-                bool useUniversal = false;
+                PayloadKind useKind = PayloadKind::INJECTOR_11_17;
                 std::string content = "Select the " + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "target console" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + " type.";
                 Keyboard kbd(title + content);
                 kbd.Populate(std::vector<std::string>({"Old 3DS Family", "New 3DS Family"}));
@@ -469,7 +480,8 @@ namespace CTRPluginFramework
                     break;
                 }
                 content = "Select the exploit type.\n\nHINT: Select the exploit based on\nthe " + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + "target console" + ToggleDrawMode(Render::BOLD | Render::UNDERLINE) + " firmware version.\n";
-                content += "Firmware 11.16 or more:\n    3DS ROP xPloit Injector\n";
+                content += "Firmware 11.17:\n    xPloitInjector (11.17)\n";
+                content += "Firmware 11.16:\n    xPloitInjector (11.16)\n";
                 content += "Firmware 11.15 or less:\n    universal-otherapp\n\n";
                 bool customFileExists = File::Exists("/kartdlphax_otherapp.bin");
                 std::string sdEntry = "Custom file from SD";
@@ -480,7 +492,7 @@ namespace CTRPluginFramework
                 }
 
                 kbd.GetMessage() = title + content;
-                kbd.Populate(std::vector<std::string>({"3DS ROP xPloit Injector", "universal-otherapp", sdEntry}));
+                kbd.Populate(std::vector<std::string>({"ROPxPloitInjector (11.17)", "ROPxPloitInjector (11.16)", "universal-otherapp", sdEntry}));
                 bool typeloop = true;
                 while (typeloop)
                 {
@@ -488,15 +500,20 @@ namespace CTRPluginFramework
                     {
                     case 0:
                         useBuiltIn = true;
-                        useUniversal = false;
+                        useKind = PayloadKind::INJECTOR_11_17;
                         typeloop = false;
                         break;
                     case 1:
                         useBuiltIn = true;
-                        useUniversal = true;
+                        useKind = PayloadKind::INJECTOR_11_16;
                         typeloop = false;
                         break;
                     case 2:
+                        useBuiltIn = true;
+                        useKind = PayloadKind::UNIVERSAL_OTHERAPP;
+                        typeloop = false;
+                        break;
+                    case 3:
                         if (customFileExists)
                         {
                             useBuiltIn = false;
@@ -509,7 +526,7 @@ namespace CTRPluginFramework
                         break;
                     }
                 }
-                info.Set(useBuiltIn, useUniversal, targetIsN3DS, targetRegion);
+                info.Set(useBuiltIn, useKind, targetIsN3DS, targetRegion);
             }
         }
         Process::Play();
