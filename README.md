@@ -8,9 +8,9 @@
 ### [Video Demonstration](https://www.youtube.com/watch?v=W2RLSJZhQFc)
 
 ## Installation
-The exploit uses a 3GX Plugin in the host system. Therefore, in order to use this exploit you need to install the [3GX Loader Luma3DS fork](https://github.com/Nanquitas/Luma3DS/releases/latest).
+The exploit uses a 3GX Plugin in the host system. Therefore, in order to use this exploit you need to install the [3GX Loader Luma3DS fork](https://github.com/PabloMK7/Luma3DS_3GX/releases).
 
-In the host console, place the `.3gx` file from the [Releases page](https://github.com/mariohackandglitch/kartdlphax/releases/latest) in the following directories depending on your game region:
+In the host console, place the `.3gx` file from the [Releases page](https://github.com/PabloMK7/kartdlphax/releases/latest) in the following directories depending on your game region:
 - EUR: `luma/plugins/0004000000030700`
 - JAP: `luma/plugins/0004000000030600`
 - USA: `luma/plugins/0004000000030800`
@@ -28,7 +28,7 @@ By default, the plugin will use the built-in otherapps ([3DS ROP xPloit Injector
 
 5. Once the multiplayer menu loads on the host 3ds, select `Grand Prix` then `50cc` then any driver combination and finally the `Mushroom Cup`. After a while the exploit will trigger on the client 3ds(es).
 
-Keep in mind that while you can send the exploit to 8 consoles at the same time, the success rate seems to decrease for each console added.
+Keep in mind that while you can send the exploit to 7 consoles at the same time, the success rate seems to decrease for each console added.
 
 ## Technical Details
 This exploit consists of 3 stages + the otherapp.
