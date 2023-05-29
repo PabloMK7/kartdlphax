@@ -39,26 +39,26 @@ const long int xploit_injector_1116_bins_sizes[2][3] = {
 
 const unsigned char* xploit_injector_1117_bins[2][3] = {
     {
-        o3ds_1116_europe_xploit_injector,
+        o3ds_1117_europe_xploit_injector,
         o3ds_1117_america_xploit_injector,
-        o3ds_1116_japan_xploit_injector,
+        o3ds_1117_japan_xploit_injector,
     },
     {
-        n3ds_1116_europe_xploit_injector,
+        n3ds_1117_europe_xploit_injector,
         n3ds_1117_america_xploit_injector,
-        n3ds_1116_japan_xploit_injector,
+        n3ds_1117_japan_xploit_injector,
     }
 };
 
 const long int xploit_injector_1117_bins_sizes[2][3] = {
     {
-        o3ds_1116_europe_xploit_injector_size,
+        o3ds_1117_europe_xploit_injector_size,
         o3ds_1117_america_xploit_injector_size,
-        o3ds_1116_japan_xploit_injector_size,
+        o3ds_1117_japan_xploit_injector_size,
     },
     {
-        n3ds_1116_europe_xploit_injector_size,
+        n3ds_1117_europe_xploit_injector_size,
         n3ds_1117_america_xploit_injector_size,
-        n3ds_1116_japan_xploit_injector_size,
+        n3ds_1117_japan_xploit_injector_size,
     }
 };
