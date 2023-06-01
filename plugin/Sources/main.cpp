@@ -160,6 +160,10 @@ namespace CTRPluginFramework
 
     }
 
+    // While the main flaw that enables the exploit is present in all of the game regions, KOR and TWN use a
+    // slightly later build of the download play application. This build has a different memory layout
+    // which messes up the exploit, so a completely different explotation path is required.
+
     static constexpr u32 TRANSFERBLOCKSIZE = 0x37C;                             // The size in bytes of a single transfer block.
 
 	u32 pwnBuffer[TRANSFERBLOCKSIZE / 4] = { 0 };                               // Buffer sent with the vtable pwn
@@ -177,7 +181,7 @@ namespace CTRPluginFramework
         0x1424FDB4,
         0x1424F774,
         0x1424F524
-    }; //                             
+    }; // Korean buffer starts at 0x142308FC                         
     static constexpr u32 ROPBUF[] = {                                           // Start of the ROP in the client application
         STARTBUFFER[0] + 8,
         STARTBUFFER[1] + 8,
