@@ -419,7 +419,7 @@ namespace CTRPluginFramework
         Process::Pause();
         info.Load();
         const char* regTexts[] {"Europe", "America", "Japan"};
-        std::string title = ToggleDrawMode(Render::UNDERLINE) + CenterAlign("kartdlphax v1.3.2") + ToggleDrawMode(Render::UNDERLINE) + "\n";
+        std::string title = ToggleDrawMode(Render::UNDERLINE) + CenterAlign("kartdlphax v1.3.3") + ToggleDrawMode(Render::UNDERLINE) + "\n";
         bool loopContinue = true;
         bool promptSettings = false;
         while (loopContinue) {
