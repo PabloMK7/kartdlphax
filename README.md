@@ -8,7 +8,7 @@
 ### [Video Demonstration](https://www.youtube.com/watch?v=W2RLSJZhQFc)
 
 ## Installation
-The exploit uses a 3GX Plugin in the host system. Therefore, in order to use this exploit you need to install the [Luma3DS 13.0 or above](https://github.com/Luma3DS/Luma3DS/releases).
+The exploit uses a 3GX Plugin in the host system. Therefore, in order to use this exploit you need to install [Luma3DS 13.0 or above](https://github.com/Luma3DS/Luma3DS/releases) or the [3GX Loader Luma3DS fork](https://github.com/PabloMK7/Luma3DS_3GX/releases).
 
 In the host console, place the `.3gx` file from the [Releases page](https://github.com/PabloMK7/kartdlphax/releases/latest) in the following directories depending on your game region:
 - EUR: `luma/plugins/0004000000030700`
